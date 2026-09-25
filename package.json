@@ -15,7 +15,8 @@
     "format:check": "biome format .",
     "test": "NODE_OPTIONS=--experimental-sqlite vitest run",
     "test:watch": "NODE_OPTIONS=--experimental-sqlite vitest",
-    "cli": "NODE_OPTIONS=--experimental-sqlite tsx src/cli.ts"
+    "cli": "NODE_OPTIONS=--experimental-sqlite tsx src/cli.ts",
+    "login": "tsx scripts/login.ts"
   },
   "dependencies": {
     "dotenv": "^18.0.3",

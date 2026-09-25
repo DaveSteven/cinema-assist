@@ -8,6 +8,7 @@ export type AppConfig = {
   readonly logLevel: LogLevel;
   readonly dbPath: string;
   readonly browserProfileDir: string;
+  readonly browserChannel: string;
   readonly headless: boolean;
   readonly telegram?: {
     readonly botToken: string;
@@ -42,6 +43,7 @@ const rawConfigSchema = z
       .default("info"),
     dbPath: z.string().min(1).default("./data/cinema-assist.sqlite"),
     browserProfileDir: z.string().min(1).default("./.auth/profile"),
+    browserChannel: z.string().min(1).default("chrome"),
     headless: booleanish,
     telegramBotToken: z.string().min(1).optional(),
     telegramChatId: z.string().min(1).optional(),
@@ -78,6 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: read(env, "LOG_LEVEL"),
     dbPath: read(env, "DB_PATH"),
     browserProfileDir: read(env, "BROWSER_PROFILE_DIR"),
+    browserChannel: read(env, "BROWSER_CHANNEL"),
     headless: read(env, "HEADLESS"),
     telegramBotToken: read(env, "TELEGRAM_BOT_TOKEN"),
     telegramChatId: read(env, "TELEGRAM_CHAT_ID"),
@@ -102,6 +105,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: data.logLevel,
     dbPath: data.dbPath,
     browserProfileDir: data.browserProfileDir,
+    browserChannel: data.browserChannel,
     headless: data.headless,
     ...(telegram !== undefined ? { telegram } : {}),
   };
@@ -114,6 +118,7 @@ export function describeConfig(config: AppConfig): Record<string, unknown> {
     logLevel: config.logLevel,
     dbPath: config.dbPath,
     browserProfileDir: config.browserProfileDir,
+    browserChannel: config.browserChannel,
     headless: config.headless,
     telegramConfigured: config.telegram !== undefined,
   };

@@ -41,13 +41,15 @@ https://transaction.ticket-cinemasunshine.com/projects/sskts-production/purchase
 
 ### 2.2 会员登录
 
-会员入口先跳转到：
+人工登录入口为：
 
 ```text
-https://login.member.cinemasunshine.co.jp/auth?redirect_uri=...
+https://login.member.cinemasunshine.co.jp/auth
 ```
 
-登录成功后再重定向至带 `login=1` 的购票入口。应使用 Playwright 持久化浏览器目录，由用户首次手工登录；程序不得保存明文密码，也不得直接调用登录 API。
+2026-09-25 人工复验确认：自行给该地址附加完整官网 URL 形式的 `redirect_uri` 会触发 `didMountAuthPage` 事件信息获取错误；删除该参数后可以正常登录。除非以后从官网实际跳转中重新确认协议，否则不得自行拼接 `redirect_uri`。
+
+应使用 Playwright 持久化浏览器目录，由用户首次手工登录；程序不得保存明文密码，也不得直接调用登录 API。
 
 ### 2.3 交易与锁座机制
 
@@ -448,4 +450,3 @@ MVP 完成需同时满足：
 3. 不猜测网站字段；无法确认时保存脱敏 fixture，并把解析逻辑做成可替换适配器。
 4. 未经明确人工监督，不执行会产生真实临时占座的在线测试。
 5. 绝不进入或提交最终购买确认页面。
-

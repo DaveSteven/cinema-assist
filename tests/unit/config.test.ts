@@ -11,6 +11,7 @@ describe("loadConfig", () => {
       logLevel: "info",
       dbPath: "./data/cinema-assist.sqlite",
       browserProfileDir: "./.auth/profile",
+      browserChannel: "chrome",
       headless: false,
     });
   });
