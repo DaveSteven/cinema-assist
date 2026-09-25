@@ -1,0 +1,14 @@
+{
+  "cntReserveFree": 3,
+  "cntSeatLine": 2,
+  "listSeat": [
+    {
+      "seatSection": "   ",
+      "listFreeSeat": [
+        { "seatNum": "ｄ－４", "spseatKbn": "001", "spseatAdd1": 0, "spseatAdd2": 0 },
+        { "seatNum": "ｄ－５", "spseatKbn": "001", "spseatAdd1": 0, "spseatAdd2": 0 },
+        { "seatNum": "ｅ－５", "spseatKbn": "002", "spseatAdd1": 0, "spseatAdd2": 0 }
+      ]
+    }
+  ]
+}

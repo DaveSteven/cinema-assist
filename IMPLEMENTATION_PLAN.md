@@ -159,6 +159,8 @@ type WatchRule = {
   preferredRows?: string[];
   excludedRows?: string[];
   preferredSeatNumbers?: number[];
+  allowedSeatTypes?: string[];     // 例如 standard、premium；默认仅 standard
+  maxSurchargeYen?: number;        // 每座可接受的最高附加费；默认 0
   aislePreference: "none" | "prefer" | "avoid";
   mode: "notify" | "assist" | "hold";
 };
@@ -192,7 +194,9 @@ type Seat = {
   available: boolean;
   selectable: boolean;
   wheelchair: boolean;
-  specialType?: string;
+  seatType: string;                // standard、premium、grand-class 等官网实际类型
+  priceCategory?: string;          // 官网显示的价位/票价区名称
+  surchargeYen?: number;           // 此座位相对普通席的附加费
   x?: number;
   y?: number;
 };
@@ -200,7 +204,15 @@ type Seat = {
 
 ## 6. 座位评分规则
 
-先生成满足票数的候选组，再评分。连座必须属于同一 row/section，座号连续，并且每个座位均可选择。
+先生成满足票数的候选组，再评分。连座必须属于同一 row/section、同一座位等级和价位区，座号连续，并且每个座位均可选择。
+
+IMAX 等影厅可能同时存在普通席和带附加费的特殊席。默认采用保守策略：
+
+- 默认只允许明确识别为普通席且 `surchargeYen` 为 0 的座位。
+- 无法识别 `seatType`、价位区或附加费的座位不得自动进入推荐列表，必须在 dry-run 中标为 `unknown` 供人工核对。
+- 只有规则明确设置 `allowedSeatTypes` 和足够的 `maxSurchargeYen` 时，才允许推荐高价座位。
+- 不得把不同座位等级、价位区或附加费的座位组合成连座。
+- 页面展示的是总价而不是附加费时，保留原始价目文本，不得猜测或自行换算。
 
 默认分数：
 
@@ -211,6 +223,8 @@ type Seat = {
 - 组内不连续：直接淘汰（requireAdjacent=true 时）
 - 包含轮椅位：直接淘汰，除非未来明确支持
 - 用户排除行：直接淘汰
+- 座位等级不在 allowedSeatTypes：直接淘汰
+- 附加费未知或超过 maxSurchargeYen：直接淘汰
 + 命中 preferredRows：15
 + 全部命中 preferredSeatNumbers：10
 +/− 过道偏好：5
@@ -218,7 +232,7 @@ type Seat = {
 
 目标排默认设为从银幕向后 65% 的位置，但必须允许用户按影厅覆盖配置。不要假设所有厅的 DOM 顺序都是从前到后；首次解析影厅时同时读取屏幕标记和座标确认方向。
 
-评分函数必须纯函数化，并用 fixture 覆盖：单座、双连座、三连座、断号、过道、不可用座、轮椅位、奇偶布局。
+评分函数必须纯函数化，并用 fixture 覆盖：单座、双连座、三连座、断号、过道、不可用座、轮椅位、奇偶布局、普通/高价座混排、未知价位、附加费上限以及跨价位连座。
 
 ## 7. 状态机
 
@@ -302,7 +316,7 @@ CANCELLED
 
 1. 确认页面显示的电影、日期、时间和影厅全部匹配规则。
 2. 读取座位图并标准化。
-3. 对候选组排序。
+3. 校验座位等级、价位区和附加费符合规则，再对候选组排序。
 4. 逐一尝试，最多 3 组；每组失败前重新读取座位状态。
 5. 点击座位后校验 UI 中已选数量和座号。
 6. 勾选利用条款。
@@ -318,7 +332,7 @@ CANCELLED
 首版实现 console，之后实现 Telegram。成功通知必须包含：
 
 - 电影名、日期、时间、影厅/规格
-- 座位号
+- 座位号、座位等级、价位区和每座附加费
 - “已临时锁座，不是购买完成”
 - 页面剩余倒计时
 - 要求用户立即切换到浏览器完成票种、个人信息和付款
@@ -368,12 +382,14 @@ CANCELLED
 ### 阶段 E：座位读取与评分（先 dry-run）
 
 1. 实现座位 DOM 适配器，只读，不点击。
-2. 输出座位列表和布局摘要。
-3. 实现候选组生成与评分。
-4. `dry-run` 模式在座位图上打印最佳 5 组，但不选座。
-5. 对不同屏幕 fixture 做单元测试。
+2. 从官网 DOM/页面状态读取并保留每个座位的座位等级、价位区、附加费及原始价目文本；不得凭名称猜价格。
+3. 输出座位列表、布局摘要以及各等级/价位区的可用座位数量。
+4. 实现候选组生成与评分，严格应用 `allowedSeatTypes` 和 `maxSurchargeYen`。
+5. 为 CLI 增加等价于 `--seat-type`、`--exclude-seat-type`、`--max-surcharge` 的规则配置；实际参数命名应与现有 `watch add` 风格一致。
+6. `dry-run` 模式打印最佳 5 组及其座位等级、价位区、每座附加费和价格识别依据，但不选座。
+7. 对普通席、不同高价席、混合价位和未知价位的屏幕 fixture 做单元测试。
 
-验收：dry-run 截图中的可用座位与程序解析结果一致；评分测试全通过。
+验收：dry-run 截图中的可用座位、座位等级和页面显示价格与程序解析结果一致；默认配置不推荐任何高价或价格未知座位；明确允许某等级及附加费上限后才会推荐；不同等级/价位不得组成连座；评分测试全通过。
 
 ### 阶段 F：assist 模式
 
@@ -435,7 +451,7 @@ MVP 完成需同时满足：
 1. 能配置并监听池袋影院的指定电影/日期/规格。
 2. 能识别新场次及开售状态。
 3. 能复用用户手工建立的会员登录状态。
-4. 能解析座位、筛选连座并给出可解释评分。
+4. 能解析座位、座位等级和附加费，按价格约束筛选连座并给出可解释评分。
 5. dry-run、assist、hold 三种模式边界清楚。
 6. hold 成功严格以进入票种页并核对座号为准。
 7. 用户收到带倒计时的通知，付款必须人工完成。

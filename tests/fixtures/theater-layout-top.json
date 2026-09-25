@@ -1,0 +1,11 @@
+{
+  "type": 0,
+  "size": { "w": 1346, "h": 903 },
+  "objects": [
+    { "w": 572, "h": 53, "x": 387, "y": 90, "image": "/images/theater/20/screen/007.svg" },
+    { "w": 128, "h": 260, "x": 367, "y": 223, "image": "/images/theater/20/entrance/007.svg" }
+  ],
+  "seatStart": { "x": 367, "y": 223 },
+  "hc": ["A12", "A13"],
+  "specialSeats": [{ "name": "ottoman", "data": ["A6", "A7", "A8", "A9", "A10"] }]
+}

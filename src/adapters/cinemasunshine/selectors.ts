@@ -19,7 +19,17 @@ export const SELECTORS = {
     passwordInput: 'input[name="password"]',
     submitButton: { role: "button" as const, name: "ログインする" },
   },
+  seat: {
+    seat: "div.seat",
+    seatTypes: ".seat-types",
+    seatTypesItem: ".seat-types li",
+    seatInfo: ".seat-info",
+    screen: 'img[src*="/screen/"]',
+  },
 } as const;
+
+export const SEAT_STATE_URL_FRAGMENT = "/api/purchase/getSeatState";
+export const THEATER_LAYOUT_URL_FRAGMENT = "/json/theater/";
 
 export const TEXT_PATTERNS = {
   sessionExpired: [

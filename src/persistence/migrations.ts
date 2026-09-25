@@ -51,6 +51,17 @@ export const migrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: "add_seat_type_constraints",
+    up(db) {
+      db.exec(`
+        ALTER TABLE watch_rules ADD COLUMN allowed_seat_types TEXT NOT NULL DEFAULT '["standard"]';
+        ALTER TABLE watch_rules ADD COLUMN excluded_seat_types TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE watch_rules ADD COLUMN max_surcharge_yen INTEGER NOT NULL DEFAULT 0;
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

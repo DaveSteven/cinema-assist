@@ -16,6 +16,9 @@ type WatchRuleRow = {
   preferred_rows: string | null;
   excluded_rows: string | null;
   preferred_seat_numbers: string | null;
+  allowed_seat_types: string;
+  excluded_seat_types: string;
+  max_surcharge_yen: number;
   aisle_preference: string;
   mode: string;
   member_tier: string;
@@ -63,6 +66,9 @@ function rowToRule(row: WatchRuleRow): WatchRule {
     ...(preferredRows !== undefined ? { preferredRows } : {}),
     ...(excludedRows !== undefined ? { excludedRows } : {}),
     ...(preferredSeatNumbers !== undefined ? { preferredSeatNumbers } : {}),
+    allowedSeatTypes: parseJsonArray<string>(row.allowed_seat_types) ?? ["standard"],
+    excludedSeatTypes: parseJsonArray<string>(row.excluded_seat_types) ?? [],
+    maxSurchargeYen: row.max_surcharge_yen,
     aislePreference: row.aisle_preference as WatchRule["aislePreference"],
     mode: row.mode as WatchRule["mode"],
     memberTier: row.member_tier as WatchRule["memberTier"],
@@ -85,13 +91,15 @@ export class WatchRuleRepository {
           id, enabled, theater_code, movie_title_pattern, target_date,
           format_includes, format_excludes, start_time_from, start_time_to,
           ticket_count, require_adjacent, preferred_rows, excluded_rows,
-          preferred_seat_numbers, aisle_preference, mode, member_tier,
+          preferred_seat_numbers, allowed_seat_types, excluded_seat_types,
+          max_surcharge_yen, aisle_preference, mode, member_tier,
           sale_opens_at_override, created_at, updated_at
         ) VALUES (
           @id, 1, @theaterCode, @movieTitlePattern, @targetDate,
           @formatIncludes, @formatExcludes, @startTimeFrom, @startTimeTo,
           @ticketCount, @requireAdjacent, @preferredRows, @excludedRows,
-          @preferredSeatNumbers, @aislePreference, @mode, @memberTier,
+          @preferredSeatNumbers, @allowedSeatTypes, @excludedSeatTypes,
+          @maxSurchargeYen, @aislePreference, @mode, @memberTier,
           @saleOpensAtOverride, @createdAt, @updatedAt
         )`,
       )
@@ -113,6 +121,9 @@ export class WatchRuleRepository {
           input.preferredSeatNumbers !== undefined
             ? JSON.stringify(input.preferredSeatNumbers)
             : null,
+        allowedSeatTypes: JSON.stringify(input.allowedSeatTypes),
+        excludedSeatTypes: JSON.stringify(input.excludedSeatTypes),
+        maxSurchargeYen: input.maxSurchargeYen,
         aislePreference: input.aislePreference,
         mode: input.mode,
         memberTier: input.memberTier,

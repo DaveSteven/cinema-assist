@@ -38,6 +38,9 @@ watch add options:
   --mode <notify>        notify (assist/hold arrive in a later phase)
   --member <tier>        platinum | bronze | gold | none (default none)
   --sale-at <iso>        Override the expected sale opening time
+  --seat-type <type>     Allowed seat type (repeatable / comma separated, default standard)
+  --exclude-seat-type <type>  Excluded seat type (repeatable / comma separated)
+  --max-surcharge <yen>  Maximum surcharge per seat in yen (default 0)
 
 Monitoring is low frequency and never purchases automatically.`;
 
@@ -53,6 +56,9 @@ const PARSE_OPTIONS = {
   mode: { type: "string" },
   member: { type: "string" },
   "sale-at": { type: "string" },
+  "seat-type": { type: "string", multiple: true },
+  "exclude-seat-type": { type: "string", multiple: true },
+  "max-surcharge": { type: "string" },
   theater: { type: "string" },
 } as const;
 
@@ -89,6 +95,15 @@ function parseTickets(value: string | undefined): number | undefined {
   return parsed;
 }
 
+function parseNonNegativeInt(value: string | undefined, flag: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${flag} must be a non-negative integer, received "${value}"`);
+  }
+  return parsed;
+}
+
 function parseBooleanFlag(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
   if (["true", "1", "yes", "on"].includes(value.toLowerCase())) return true;
@@ -104,6 +119,7 @@ function printRule(rule: WatchRule): void {
       `  mode:         ${rule.mode}`,
       `  target:       ${rule.targetDate}  ${rule.movieTitlePattern}`,
       `  memberTier:   ${rule.memberTier}`,
+      `  seatTypes:    ${rule.allowedSeatTypes.join(", ")} (max surcharge ¥${rule.maxSurchargeYen})`,
       `  expectedOpen: ${expectedSaleOpensAtForRule(rule)}`,
     ].join("\n")}\n`,
   );
@@ -131,6 +147,15 @@ function commandWatchAdd(rest: string[]): void {
     ...(values.mode !== undefined ? { mode: values.mode } : {}),
     ...(values.member !== undefined ? { memberTier: values.member } : {}),
     ...(values["sale-at"] !== undefined ? { saleOpensAtOverride: values["sale-at"] } : {}),
+    ...(values["seat-type"] !== undefined
+      ? { allowedSeatTypes: splitList(values["seat-type"]) }
+      : {}),
+    ...(values["exclude-seat-type"] !== undefined
+      ? { excludedSeatTypes: splitList(values["exclude-seat-type"]) }
+      : {}),
+    ...(values["max-surcharge"] !== undefined
+      ? { maxSurchargeYen: parseNonNegativeInt(values["max-surcharge"], "--max-surcharge") }
+      : {}),
   });
 
   const created = context.repository.create({ ...input, id: randomUUID() });
