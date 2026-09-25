@@ -5,40 +5,13 @@ import type {
   SalesWindows,
   Screening,
 } from "../../domain/screening.js";
+import { toJstIsoString, toOptionalJstIsoString } from "../../domain/time.js";
 import type { DaySchedule, LocalizedName, ScheduleIndex } from "./schedule-schema.js";
+
+export { toJstIsoString };
 
 export const PURCHASE_BASE_URL =
   "https://transaction.ticket-cinemasunshine.com/projects/sskts-production/purchase/transaction";
-
-const JST_OFFSET = "+09:00";
-
-const JST_FORMATTER = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Tokyo",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
-
-export function toJstIsoString(instant: string): string {
-  const date = new Date(instant);
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid date value: ${instant}`);
-  }
-  const parts = JST_FORMATTER.formatToParts(date);
-  const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((part) => part.type === type)?.value ?? "00";
-  const rawHour = lookup("hour");
-  const hour = rawHour === "24" ? "00" : rawHour;
-  return `${lookup("year")}-${lookup("month")}-${lookup("day")}T${hour}:${lookup("minute")}:${lookup("second")}${JST_OFFSET}`;
-}
-
-function toOptionalJstIsoString(instant: string | undefined): string | undefined {
-  return instant === undefined ? undefined : toJstIsoString(instant);
-}
 
 export function pickLocalizedName(name: LocalizedName | undefined): string {
   if (name === undefined) return "";
