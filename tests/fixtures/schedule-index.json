@@ -1,0 +1,71 @@
+{
+  "2647900": {
+    "020": {
+      "20260918": {
+        "0800": [
+          {
+            "branchCode": "70",
+            "availabilityStarts": "2026-09-09T00:00:00+0900",
+            "availabilityStartsToMembers": "2026-09-09T00:00:00+0900"
+          }
+        ]
+      },
+      "20260919": {
+        "0800": [
+          {
+            "branchCode": "70",
+            "availabilityStarts": "2026-09-16T00:00:00+0900",
+            "availabilityStartsToMembers": "2026-09-16T00:00:00+0900"
+          }
+        ]
+      }
+    }
+  },
+  "2764800": {
+    "020": {
+      "20260918": {
+        "1330": [
+          {
+            "branchCode": "111",
+            "availabilityStarts": "2026-09-09T00:00:00+0900",
+            "availabilityStartsToMembers": "2026-09-09T00:00:00+0900"
+          }
+        ],
+        "2125": [
+          {
+            "branchCode": "111",
+            "availabilityStarts": "2026-09-09T00:00:00+0900",
+            "availabilityStartsToMembers": "2026-09-09T00:00:00+0900"
+          }
+        ]
+      }
+    }
+  },
+  "2852500": {
+    "020": {
+      "20260918": {
+        "1105": [
+          {
+            "branchCode": "90",
+            "availabilityStarts": "2026-09-09T00:00:00+0900",
+            "availabilityStartsToMembers": "2026-09-09T00:00:00+0900"
+          }
+        ]
+      }
+    }
+  },
+  "0123456": {
+    "012": {
+      "20260918": {
+        "1000": [
+          {
+            "branchCode": "10",
+            "availabilityStarts": "2026-09-09T00:00:00+0900",
+            "availabilityStartsToMembers": "2026-09-09T00:00:00+0900",
+            "customDiagnostic": "preserve-me"
+          }
+        ]
+      }
+    }
+  }
+}

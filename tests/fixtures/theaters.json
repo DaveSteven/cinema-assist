@@ -1,0 +1,28 @@
+{
+  "012": {
+    "additionalProperty": [{ "name": "userCodeURL", "value": "reportAPI" }],
+    "branchCode": "012",
+    "name": { "en": "", "ja": "シネマサンシャイン北島" },
+    "rooms": {
+      "10": {
+        "additionalProperty": [{ "name": "wheelchairSeatCount", "value": "2" }],
+        "address": { "en": "", "ja": "" },
+        "branchCode": "10",
+        "containedInPlace": { "branchCode": "012" },
+        "name": { "en": "Cinema1", "ja": "シネマ１" }
+      },
+      "20": {
+        "additionalProperty": [{ "name": "wheelchairSeatCount", "value": "0" }],
+        "address": { "en": "", "ja": "" },
+        "branchCode": "20",
+        "containedInPlace": { "branchCode": "012" },
+        "name": { "en": "Cinema2", "ja": "4DX" }
+      }
+    }
+  },
+  "020": {
+    "additionalProperty": [{ "name": "userCodeURL", "value": "" }],
+    "branchCode": "020",
+    "name": { "en": "", "ja": "グランドシネマサンシャイン 池袋" }
+  }
+}

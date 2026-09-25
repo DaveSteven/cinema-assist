@@ -1,0 +1,64 @@
+{
+  "1310": {
+    "101": {
+      "id": "020284530202609181011310",
+      "startDate": "2026-09-18T04:10:00.000Z",
+      "endDate": "2026-09-18T14:59:00+0900",
+      "location": {
+        "branchCode": "101",
+        "name": { "ja": "シアター10 sola" }
+      },
+      "maximumAttendeeCapacity": 150,
+      "remainingAttendeeCapacity": 113,
+      "smartTheaterNo": "2845300",
+      "description": { "ja": "", "en": "" },
+      "theaterName": { "ja": "", "en": "" },
+      "name": { "ja": "映画ちいかわ 人魚の島のひみつ", "en": "" },
+      "offers": {
+        "availabilityStarts": "2026-09-09T00:00:00+0900",
+        "validFrom": "2026-09-16T00:00:00+0900",
+        "validThrough": "2026-09-18T04:10:00.000Z",
+        "availabilityStartsToMembers": "2026-09-09T00:00:00+0900",
+        "validFromForMembers": "2026-09-15T11:30:00.000Z",
+        "validThroughForMembers": "2026-09-18T04:10:00.000Z",
+        "isOnlyWindowSale": false
+      },
+      "workPerformed": { "duration": "PT1H39M" },
+      "superEvent": { "id": "2845300", "description": { "ja": "", "en": "" } },
+      "additionalProperty": [
+        { "name": "sortNumber", "value": "43" }
+      ]
+    }
+  },
+  "1530": {
+    "101": {
+      "id": "020284530202609181011530",
+      "startDate": "2026-09-18T06:30:00.000Z",
+      "endDate": "2026-09-18T17:19:00+0900",
+      "location": {
+        "branchCode": "101",
+        "name": { "ja": "シアター10 sola" }
+      },
+      "maximumAttendeeCapacity": 150,
+      "remainingAttendeeCapacity": 118,
+      "smartTheaterNo": "2845300",
+      "description": { "ja": "", "en": "" },
+      "theaterName": { "ja": "", "en": "" },
+      "name": { "ja": "映画ちいかわ 人魚の島のひみつ", "en": "" },
+      "offers": {
+        "availabilityStarts": "2026-09-09T00:00:00+0900",
+        "validFrom": "2026-09-16T00:00:00+0900",
+        "validThrough": "2026-09-18T06:30:00.000Z",
+        "availabilityStartsToMembers": "2026-09-09T00:00:00+0900",
+        "validFromForMembers": "2026-09-15T11:30:00.000Z",
+        "validThroughForMembers": "2026-09-18T06:30:00.000Z",
+        "isOnlyWindowSale": false
+      },
+      "workPerformed": { "duration": "PT1H39M" },
+      "superEvent": { "id": "2845300", "description": { "ja": "", "en": "" } },
+      "additionalProperty": [
+        { "name": "sortNumber", "value": "43" }
+      ]
+    }
+  }
+}

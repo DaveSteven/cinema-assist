@@ -1,0 +1,41 @@
+{
+  "1000": {
+    "20": {
+      "id": "02029222220260929201000",
+      "startDate": "2026-09-29T01:00:00.000Z",
+      "endDate": "2026-09-29T11:00:00+0900",
+      "location": {
+        "branchCode": "20",
+        "name": { "ja": "シアター２" }
+      },
+      "maximumAttendeeCapacity": 200,
+      "remainingAttendeeCapacity": 120,
+      "smartTheaterNo": "2922222",
+      "description": { "ja": "", "en": "" },
+      "theaterName": { "ja": "", "en": "" },
+      "name": { "ja": "未来の作品", "en": "" },
+      "offers": {
+        "availabilityStarts": "2026-09-23T00:00:00+0900",
+        "validFrom": "2026-09-27T00:00:00+0900",
+        "validThrough": "2026-09-29T01:00:00.000Z",
+        "availabilityStartsToMembers": "2026-09-23T00:00:00+0900",
+        "validFromForMembers": "2026-09-26T11:30:00.000Z",
+        "validThroughForMembers": "2026-09-29T01:00:00.000Z",
+        "isOnlyWindowSale": false
+      },
+      "workPerformed": { "duration": "PT2H" },
+      "superEvent": { "id": "2922222", "description": { "ja": "", "en": "" } },
+      "additionalProperty": [
+        { "name": "sortNumber", "value": "1" },
+        {
+          "name": "platinumMemberConditions",
+          "value": "2,2026-09-26T11:30:00.000Z,2026-09-29T01:00:00.000Z,2"
+        },
+        {
+          "name": "standardMemberConditions",
+          "value": "1,2026-09-26T21:00:00+0900,2026-09-29T01:00:00.000Z,"
+        }
+      ]
+    }
+  }
+}

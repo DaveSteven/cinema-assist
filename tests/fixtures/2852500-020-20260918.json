@@ -1,0 +1,42 @@
+{
+  "1105": {
+    "90": {
+      "id": "02028525020260918901105",
+      "startDate": "2026-09-18T02:05:00.000Z",
+      "endDate": "2026-09-18T13:40:00+0900",
+      "location": {
+        "branchCode": "90",
+        "name": { "ja": "シアター９" }
+      },
+      "maximumAttendeeCapacity": 101,
+      "remainingAttendeeCapacity": 73,
+      "smartTheaterNo": "2852500",
+      "description": { "ja": "", "en": "" },
+      "theaterName": { "ja": "", "en": "" },
+      "name": { "ja": "スパイダーマン：ブランド・ニュー・デイ【字幕】", "en": "" },
+      "offers": {
+        "availabilityStarts": "2026-09-09T00:00:00+0900",
+        "validFrom": "2026-09-16T00:00:00+0900",
+        "validThrough": "2026-09-18T02:05:00.000Z",
+        "availabilityStartsToMembers": "2026-09-09T00:00:00+0900",
+        "validFromForMembers": "2026-09-15T11:30:00.000Z",
+        "validThroughForMembers": "2026-09-18T02:05:00.000Z",
+        "isOnlyWindowSale": false
+      },
+      "workPerformed": { "duration": "PT2H25M" },
+      "superEvent": { "id": "2852500", "description": { "ja": "", "en": "" } },
+      "additionalProperty": [
+        { "name": "sortNumber", "value": "51" },
+        {
+          "name": "platinumMemberConditions",
+          "value": "2,2026-09-15T11:30:00.000Z,2026-09-18T02:05:00.000Z,2"
+        },
+        {
+          "name": "standardMemberConditions",
+          "value": "1,2026-09-15T21:00:00+0900,2026-09-18T02:05:00.000Z,"
+        }
+      ],
+      "futureField": { "note": "preserve-me" }
+    }
+  }
+}

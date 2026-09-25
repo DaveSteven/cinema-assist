@@ -1,0 +1,41 @@
+{
+  "0800": {
+    "70": {
+      "id": "02026479020260918700800",
+      "startDate": "2026-09-17T23:00:00.000Z",
+      "endDate": "2026-09-18T10:19:00+0900",
+      "location": {
+        "branchCode": "70",
+        "name": { "ja": "シアター７" }
+      },
+      "maximumAttendeeCapacity": 77,
+      "remainingAttendeeCapacity": 71,
+      "smartTheaterNo": "2647900",
+      "description": { "ja": "", "en": "" },
+      "theaterName": { "ja": "", "en": "" },
+      "name": { "ja": "時には懺悔を", "en": "" },
+      "offers": {
+        "availabilityStarts": "2026-09-09T00:00:00+0900",
+        "validFrom": "2026-09-16T00:00:00+0900",
+        "validThrough": "2026-09-17T23:00:00.000Z",
+        "availabilityStartsToMembers": "2026-09-09T00:00:00+0900",
+        "validFromForMembers": "2026-09-15T11:30:00.000Z",
+        "validThroughForMembers": "2026-09-17T23:00:00.000Z",
+        "isOnlyWindowSale": false
+      },
+      "workPerformed": { "duration": "PT2H9M" },
+      "superEvent": { "id": "2647900", "description": { "ja": "", "en": "" } },
+      "additionalProperty": [
+        { "name": "sortNumber", "value": "47" },
+        {
+          "name": "platinumMemberConditions",
+          "value": "2,2026-09-15T11:30:00.000Z,2026-09-17T23:00:00.000Z,2"
+        },
+        {
+          "name": "standardMemberConditions",
+          "value": "1,2026-09-15T21:00:00+0900,2026-09-17T23:00:00.000Z,"
+        }
+      ]
+    }
+  }
+}
