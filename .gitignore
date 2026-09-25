@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Test / Playwright artifacts
+test-results/
+playwright-report/
+screenshots/
+traces/
+
+# Runtime data (keep the directory, ignore its contents)
+data/*
+!data/.gitkeep
+
+# Secrets and auth material
+.env
+.env.*
+!.env.example
+.auth/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS noise
+.DS_Store
