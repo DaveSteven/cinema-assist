@@ -6,8 +6,6 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
-const tsxBin = join(repoRoot, "node_modules", ".bin", "tsx");
-
 let workDir: string;
 let dbPath: string;
 
@@ -21,7 +19,7 @@ afterEach(() => {
 });
 
 function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(tsxBin, ["src/cli.ts", ...args], {
+  const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     env: { ...process.env, DB_PATH: dbPath, NODE_OPTIONS: "--experimental-sqlite" },
@@ -68,5 +66,21 @@ describe("watch CLI end to end", () => {
     const missing = runCli(["watch", "remove", "does-not-exist"]);
     expect(missing.status).toBe(1);
     expect(missing.stderr).toContain("Watch rule not found");
+
+    const holdAdded = runCli([
+      "watch",
+      "add",
+      "--title",
+      "作品",
+      "--date",
+      "2026-09-29",
+      "--mode",
+      "hold",
+    ]);
+    expect(holdAdded.status).toBe(0);
+    const holdId = runCli(["watch", "list"]).stdout.split("\n")[0]?.trim() ?? "";
+    const holdRun = runCli(["watch", "run", holdId]);
+    expect(holdRun.status).not.toBe(0);
+    expect(holdRun.stderr).toContain("not implemented");
   });
 });

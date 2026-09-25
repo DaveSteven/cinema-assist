@@ -22,6 +22,12 @@ export function formatNotification(event: NotificationEvent): string {
       return `${tag} 已找到场次：${describeScreening(event.screening)}；尚未开售（预计 ${event.expectedSaleOpensAt}）`;
     case "sales_open":
       return `${tag} 已开售：${describeScreening(event.screening)}；请立即前往浏览器手动完成购票（本工具不会自动付款）`;
+    case "assist_ready": {
+      const labels = event.seats.map((seat) => `${seat.row}${seat.number}`).join(", ");
+      return `${tag} assist 已就绪：${describeScreening(event.screening)}；推荐座位 [${labels}] 类型 ${event.seatType}${
+        event.priceCategory !== undefined ? `/${event.priceCategory}` : ""
+      }${event.surchargeYen !== undefined ? ` (+¥${event.surchargeYen})` : ""}；请在浏览器中手动选座并继续（本工具不会自动锁座或付款）`;
+    }
     case "sold_out":
       return `${tag} 目标场次已售罄：${describeScreening(event.screening)}`;
     case "no_match":

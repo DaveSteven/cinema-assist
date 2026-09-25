@@ -1,4 +1,5 @@
 import type { Screening } from "../domain/screening.js";
+import type { Seat } from "../domain/seat.js";
 import type { WatchRule } from "../domain/watch-rule.js";
 
 export type NotificationEvent =
@@ -6,6 +7,15 @@ export type NotificationEvent =
   | { type: "waiting_for_schedule"; rule: WatchRule }
   | { type: "waiting_for_sale"; rule: WatchRule; screening: Screening; expectedSaleOpensAt: string }
   | { type: "sales_open"; rule: WatchRule; screening: Screening }
+  | {
+      type: "assist_ready";
+      rule: WatchRule;
+      screening: Screening;
+      seats: Seat[];
+      seatType: string;
+      priceCategory?: string;
+      surchargeYen?: number;
+    }
   | { type: "sold_out"; rule: WatchRule; screening: Screening }
   | { type: "no_match"; rule: WatchRule; reason?: string }
   | { type: "rate_limited"; rule: WatchRule; message: string }

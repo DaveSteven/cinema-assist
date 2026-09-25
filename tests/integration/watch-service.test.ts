@@ -11,6 +11,7 @@ import {
   scheduleIndexSchema,
 } from "../../src/adapters/cinemasunshine/schedule-schema.js";
 import type { Clock } from "../../src/clock.js";
+import type { Seat } from "../../src/domain/seat.js";
 import { parseWatchRuleInput } from "../../src/domain/watch-rule.js";
 import { openDatabase } from "../../src/persistence/db.js";
 import { WatchRuleRepository } from "../../src/persistence/watch-rule-repository.js";
@@ -20,6 +21,7 @@ import {
   type Notifier,
 } from "../../src/services/notification-service.js";
 import {
+  isFailureWatchState,
   RuleAlreadyRunningError,
   RuleNotEnabledError,
   RuleNotFoundError,
@@ -269,6 +271,21 @@ describe("WatchService guards", () => {
     const service = buildService({}, {}, clock, notifier);
 
     await expect(service.runRule("rule-hold")).rejects.toBeInstanceOf(UnsupportedWatchModeError);
+  });
+
+  it("classifies failure states for non-zero exit codes", () => {
+    expect(isFailureWatchState("error")).toBe(true);
+    expect(isFailureWatchState("site_changed")).toBe(true);
+    expect(isFailureWatchState("login_required")).toBe(true);
+    expect(isFailureWatchState("session_expired")).toBe(true);
+    expect(isFailureWatchState("congested")).toBe(true);
+    expect(isFailureWatchState("duplicate_transaction")).toBe(true);
+    expect(isFailureWatchState("hold_conflict")).toBe(true);
+    expect(isFailureWatchState("no_match")).toBe(true);
+    expect(isFailureWatchState("user_action_required")).toBe(false);
+    expect(isFailureWatchState("ready")).toBe(false);
+    expect(isFailureWatchState("sold_out")).toBe(false);
+    expect(isFailureWatchState("cancelled")).toBe(false);
   });
 });
 
@@ -550,5 +567,106 @@ describe("WatchService schedule refresh and selection (C-02, C-03)", () => {
     expect(open?.type === "sales_open" ? open.screening.performanceId : undefined).toBe(
       "02028400020260918102100",
     );
+  });
+});
+
+describe("WatchService assist mode (F)", () => {
+  function assistSeat(): Seat {
+    return {
+      section: "",
+      row: "C",
+      number: 3,
+      label: "c3",
+      available: true,
+      selectable: true,
+      wheelchair: false,
+      seatType: "standard",
+      surchargeYen: 0,
+    };
+  }
+
+  it("runs assist on open and returns user_action_required", async () => {
+    createRule("rule-assist", {
+      mode: "assist",
+      movieTitlePattern: "スパイダーマン",
+      targetDate: "2026-09-18",
+      ticketCount: 2,
+    });
+    const clock = new FakeClock(new Date("2026-09-17T00:00:00+09:00"));
+    const { events, notifier } = makeNotifier();
+    const calls: string[] = [];
+
+    const service = new WatchService({
+      repository,
+      scheduleSource: makeSource(indexFixture, { "2852500/020/20260918": subtitleDay }),
+      notifications: new NotificationService(notifier),
+      lockDir,
+      clock,
+      random: () => 0,
+      seatAssist: async (_rule, screening) => {
+        calls.push(screening.performanceId);
+        return {
+          state: "user_action_required",
+          group: { seats: [assistSeat()], score: 90, reasons: [] },
+        };
+      },
+    });
+
+    const state = await service.runRule("rule-assist", { maxTicks: 5 });
+
+    expect(state).toBe("user_action_required");
+    expect(calls).toEqual(["02028525020260918901105"]);
+    expect(events.map((event) => event.type)).toEqual(["started", "assist_ready"]);
+    const ready = events.find((event) => event.type === "assist_ready");
+    expect(ready?.type === "assist_ready" ? ready.seats[0]?.label : undefined).toBe("c3");
+    expect(readdirSync(lockDir)).toEqual([]);
+  });
+
+  it("maps an assist anomaly outcome without proceeding", async () => {
+    createRule("rule-assist-login", {
+      mode: "assist",
+      movieTitlePattern: "スパイダーマン",
+      targetDate: "2026-09-18",
+    });
+    const clock = new FakeClock(new Date("2026-09-17T00:00:00+09:00"));
+    const { notifier } = makeNotifier();
+
+    const service = new WatchService({
+      repository,
+      scheduleSource: makeSource(indexFixture, { "2852500/020/20260918": subtitleDay }),
+      notifications: new NotificationService(notifier),
+      lockDir,
+      clock,
+      random: () => 0,
+      seatAssist: async () => ({ state: "login_required" }),
+    });
+
+    const state = await service.runRule("rule-assist-login", { maxTicks: 5 });
+    expect(state).toBe("login_required");
+  });
+
+  it("reports an error when the assist handler throws", async () => {
+    createRule("rule-assist-error", {
+      mode: "assist",
+      movieTitlePattern: "スパイダーマン",
+      targetDate: "2026-09-18",
+    });
+    const clock = new FakeClock(new Date("2026-09-17T00:00:00+09:00"));
+    const { notifier } = makeNotifier();
+
+    const service = new WatchService({
+      repository,
+      scheduleSource: makeSource(indexFixture, { "2852500/020/20260918": subtitleDay }),
+      notifications: new NotificationService(notifier),
+      lockDir,
+      clock,
+      random: () => 0,
+      seatAssist: async () => {
+        throw new Error("browser crashed");
+      },
+    });
+
+    const state = await service.runRule("rule-assist-error", { maxTicks: 5 });
+    expect(state).toBe("error");
   });
 });

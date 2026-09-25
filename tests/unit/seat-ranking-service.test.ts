@@ -210,4 +210,116 @@ describe("rankSeatGroups", () => {
     expect(prefer.some((group) => group.reasons.includes("aisle"))).toBe(true);
     expect(avoid.some((group) => group.reasons.includes("aisle avoided"))).toBe(true);
   });
+
+  it("prefers standard seats in the first two rows before Premium Class", () => {
+    const anchored: Seat[] = [];
+    for (const [index, row] of ["A", "B", "C", "D", "E", "F"].entries()) {
+      for (let number = 1; number <= 7; number += 1) {
+        anchored.push({
+          ...baseSeat(),
+          row,
+          number,
+          label: `${row}${number}`,
+          seatType: row === "E" ? "premiumClass" : "standard",
+          priceCategory: row === "E" ? "プレミアムクラス" : undefined,
+          surchargeYen: row === "E" ? 1600 : 0,
+          x: number * 40,
+          y: 100 + index * 60,
+        });
+      }
+    }
+
+    const groups = rankSeatGroups(anchored, { ...baseOptions, ticketCount: 3 });
+
+    expect(groups[0]?.seats.map((seat) => seat.row)).toEqual(["D", "D", "D"]);
+    expect(groups.every((group) => ["C", "D"].includes(group.seats[0]?.row ?? ""))).toBe(true);
+    expect(groups[0]?.reasons).toContain("premium anchor: 1 row toward screen");
+  });
+
+  it("prefers the centered second anchor row over edge seats in the first anchor row", () => {
+    const anchored = [
+      ...[1, 2, 3].map((number, index) => ({
+        ...baseSeat(),
+        row: "C",
+        number,
+        label: `C${number}`,
+        x: 450 + index * 50,
+        y: 220,
+      })),
+      ...[1, 2, 3].map((number, index) => ({
+        ...baseSeat(),
+        row: "D",
+        number,
+        label: `D${number}`,
+        x: 850 + index * 50,
+        y: 280,
+      })),
+      ...[1, 2, 3].map((number, index) => ({
+        ...baseSeat(),
+        row: "E",
+        number,
+        label: `E${number}`,
+        seatType: "premiumClass",
+        surchargeYen: 1600,
+        x: 450 + index * 50,
+        y: 340,
+      })),
+    ];
+
+    const groups = rankSeatGroups(anchored, {
+      ...baseOptions,
+      ticketCount: 3,
+      screenCenterX: 500,
+      screenWidth: 1000,
+    });
+
+    expect(groups[0]?.seats.map((seat) => seat.row)).toEqual(["C", "C", "C"]);
+    expect(groups[0]?.reasons).toContain("premium anchor: 2 rows toward screen");
+  });
+
+  it("reverses the Premium anchor direction when the screen is below", () => {
+    const anchored = ["A", "B", "C", "D", "E"].flatMap((row, index) =>
+      [1, 2, 3].map((number) => ({
+        ...baseSeat(),
+        row,
+        number,
+        label: `${row}${number}`,
+        seatType: row === "B" ? "premiumClass" : "standard",
+        surchargeYen: row === "B" ? 1600 : 0,
+        x: number * 40,
+        y: 100 + index * 60,
+      })),
+    );
+
+    const groups = rankSeatGroups(anchored, {
+      ...baseOptions,
+      screenSide: "bottom",
+      ticketCount: 3,
+    });
+
+    expect(groups[0]?.seats.map((seat) => seat.row)).toEqual(["C", "C", "C"]);
+    expect(groups.every((group) => ["C", "D"].includes(group.seats[0]?.row ?? ""))).toBe(true);
+  });
+
+  it("falls back to geometric ranking when Premium-adjacent rows have no valid group", () => {
+    const anchored = ["A", "B", "C", "D"].flatMap((row, index) =>
+      [1, 2, 3].map((number) => ({
+        ...baseSeat(),
+        row,
+        number,
+        label: `${row}${number}`,
+        seatType: row === "D" ? "premiumClass" : "standard",
+        surchargeYen: row === "D" ? 1600 : 0,
+        available: row === "A",
+        selectable: row === "A",
+        x: number * 40,
+        y: 100 + index * 60,
+      })),
+    );
+
+    const groups = rankSeatGroups(anchored, { ...baseOptions, ticketCount: 3 });
+
+    expect(groups[0]?.seats.map((seat) => seat.row)).toEqual(["A", "A", "A"]);
+    expect(groups[0]?.reasons.some((reason) => reason.startsWith("premium anchor:"))).toBe(false);
+  });
 });

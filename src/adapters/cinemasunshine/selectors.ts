@@ -26,6 +26,9 @@ export const SELECTORS = {
     seatInfo: ".seat-info",
     screen: 'img[src*="/screen/"]',
   },
+  purchase: {
+    metaList: "dl",
+  },
 } as const;
 
 export const SEAT_STATE_URL_FRAGMENT = "/api/purchase/getSeatState";

@@ -39,6 +39,8 @@ export type FreeSeatInfo = {
 export type SeatStateInfo = {
   ok: boolean;
   countFree?: number;
+  unmappableFree?: number;
+  duplicateFreeKeys?: number;
   availableKeys: Set<string>;
   byKey: Map<string, FreeSeatInfo>;
 };
@@ -65,7 +67,14 @@ export function parseSeatState(raw: unknown): SeatStateInfo {
   for (const section of parsed.data.listSeat ?? []) {
     for (const freeSeat of section.listFreeSeat ?? []) {
       const key = normalizeKey(freeSeat.seatNum);
-      if (key === undefined) continue;
+      if (key === undefined) {
+        info.unmappableFree = (info.unmappableFree ?? 0) + 1;
+        continue;
+      }
+      if (info.availableKeys.has(key)) {
+        info.duplicateFreeKeys = (info.duplicateFreeKeys ?? 0) + 1;
+        continue;
+      }
       info.availableKeys.add(key);
       info.byKey.set(key, freeSeat);
     }
@@ -112,10 +121,10 @@ export function requireSeatState(outcome: SeatStateOutcome): SeatStateInfo {
 }
 
 export function assertSeatStateCount(info: SeatStateInfo, seats: readonly Seat[]): void {
-  if (info.countFree === undefined) return;
   const actual = seats.filter((seat) => seat.available).length;
-  if (actual !== info.countFree) {
-    throw new SeatStateCountMismatchError(info.countFree, actual);
+  const expected = expectedAvailableCount(info);
+  if (actual !== expected) {
+    throw new SeatStateCountMismatchError(expected, actual);
   }
 }
 
@@ -229,7 +238,9 @@ export function captureSeatState(page: Page): SeatStateCapture {
       .json()
       .then((json: unknown) => {
         const info = parseSeatState(json);
-        resolveOutcome(info.ok ? { status: "ok", info } : { status: "invalid" });
+        resolveOutcome(
+          info.ok && isSeatStateConsistent(info) ? { status: "ok", info } : { status: "invalid" },
+        );
       })
       .catch(() => {
         resolveOutcome({ status: "invalid" });
@@ -349,6 +360,11 @@ export type SeatMapResult = {
   legend: SeatLegendEntry[];
   screenSide: ScreenSide;
   screenY?: number;
+  screenCenterX?: number;
+  screenWidth?: number;
+  url?: string;
+  seatElementCount: number;
+  parsedDomSeatCount: number;
 };
 
 export async function readSeatMap(page: Page, seatState: SeatStateInfo): Promise<SeatMapResult> {
@@ -380,13 +396,23 @@ export async function readSeatMap(page: Page, seatState: SeatStateInfo): Promise
     }));
 
     const screenEl = document.querySelector(sel.screen);
-    const screenY = screenEl === null ? undefined : screenEl.getBoundingClientRect().top;
+    const screenRect = screenEl?.getBoundingClientRect();
+    const screenY = screenRect?.top;
+    const screenCenterX =
+      screenRect !== undefined && screenRect.width > 0
+        ? screenRect.left + screenRect.width / 2
+        : undefined;
+    const screenWidth =
+      screenRect !== undefined && screenRect.width > 0 ? screenRect.width : undefined;
 
-    return { seats, legend, screenY };
+    return { seats, legend, screenY, screenCenterX, screenWidth, elementCount: elements.length };
   }, selectors)) as {
     seats: DomSeat[];
     legend: { className: string; text: string }[];
     screenY?: number;
+    screenCenterX?: number;
+    screenWidth?: number;
+    elementCount: number;
   };
 
   const legend = parseSeatLegend(dom.legend);
@@ -400,6 +426,186 @@ export async function readSeatMap(page: Page, seatState: SeatStateInfo): Promise
     seats,
     legend,
     screenSide,
+    seatElementCount: dom.elementCount,
+    parsedDomSeatCount: dom.seats.length,
     ...(dom.screenY !== undefined ? { screenY: dom.screenY } : {}),
+    ...(dom.screenCenterX !== undefined ? { screenCenterX: dom.screenCenterX } : {}),
+    ...(dom.screenWidth !== undefined ? { screenWidth: dom.screenWidth } : {}),
+    url: page.url(),
   };
+}
+
+export type SeatMapWaitOptions = {
+  timeoutMs?: number;
+  pollMs?: number;
+  read?: (page: Page) => Promise<SeatMapResult>;
+};
+
+export type SeatMapTimeoutDiagnostics = {
+  url?: string;
+  domSeatElementCount?: number;
+  parsedDomSeatCount?: number;
+  availableCount?: number;
+  apiFreeCount?: number;
+  mappedApiFree?: number;
+  unmappableFree?: number;
+  duplicateFreeKeys?: number;
+  expectedAvailableCount?: number;
+};
+
+export type SeatMapWaitResult =
+  | ({ status: "ready" } & SeatMapResult)
+  | ({ status: "timeout" } & SeatMapTimeoutDiagnostics);
+
+export function isSeatStateConsistent(info: SeatStateInfo): boolean {
+  if (!info.ok) return false;
+  if ((info.duplicateFreeKeys ?? 0) > 0) return false;
+  if (info.countFree === undefined) return true;
+  const mapped = info.availableKeys.size;
+  const extra = info.unmappableFree ?? 0;
+  return mapped <= info.countFree && info.countFree <= mapped + extra;
+}
+
+function expectedAvailableCount(info: SeatStateInfo): number {
+  return info.availableKeys.size;
+}
+
+function seatCountMatches(info: SeatStateInfo, seats: readonly Seat[]): boolean {
+  return seats.filter((seat) => seat.available).length === expectedAvailableCount(info);
+}
+
+export async function waitForSeatMap(
+  page: Page,
+  seatState: SeatStateInfo,
+  options: SeatMapWaitOptions = {},
+): Promise<SeatMapWaitResult> {
+  const timeoutMs = options.timeoutMs ?? 20_000;
+  const pollMs = options.pollMs ?? 500;
+  const read = options.read ?? ((target: Page) => readSeatMap(target, seatState));
+  const deadline = Date.now() + timeoutMs;
+  let last: SeatMapResult | undefined;
+
+  for (;;) {
+    last = await read(page);
+    if (last.seats.length > 0 && seatCountMatches(seatState, last.seats)) {
+      return { status: "ready", ...last };
+    }
+    if (Date.now() >= deadline) {
+      return {
+        status: "timeout",
+        ...(last.url !== undefined ? { url: last.url } : {}),
+        domSeatElementCount: last.seatElementCount,
+        parsedDomSeatCount: last.parsedDomSeatCount,
+        availableCount: last.seats.filter((seat) => seat.available).length,
+        ...(seatState.countFree !== undefined ? { apiFreeCount: seatState.countFree } : {}),
+        mappedApiFree: seatState.availableKeys.size,
+        ...(seatState.unmappableFree !== undefined
+          ? { unmappableFree: seatState.unmappableFree }
+          : {}),
+        ...(seatState.duplicateFreeKeys !== undefined
+          ? { duplicateFreeKeys: seatState.duplicateFreeKeys }
+          : {}),
+        expectedAvailableCount: expectedAvailableCount(seatState),
+      };
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, pollMs);
+    });
+  }
+}
+
+export type WaitForSeatPageOptions = {
+  timeoutMs?: number;
+  pollMs?: number;
+};
+
+export async function waitForSeatPage(
+  page: Page,
+  options: WaitForSeatPageOptions = {},
+): Promise<boolean> {
+  const timeoutMs = options.timeoutMs ?? 20_000;
+  const pollMs = options.pollMs ?? 250;
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    const url = page.url();
+    const onSeatRoute = /#\/purchase\/seat|\/purchase\/seat/.test(url);
+    let count = 0;
+    try {
+      count = await page.locator(SELECTORS.seat.seat).count();
+    } catch {
+      count = 0;
+    }
+    if (onSeatRoute && count > 0) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, pollMs);
+    });
+  }
+}
+
+export type HighlightOptions = {
+  label?: string;
+};
+
+export function normalizeSeatToken(value: string): string {
+  return value
+    .replace(/[\uFF01-\uFF5E]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toUpperCase();
+}
+
+export function labelsMatch(recommended: readonly string[], matched: readonly string[]): boolean {
+  if (recommended.length !== matched.length) return false;
+  const left = [...recommended].sort();
+  const right = [...matched].sort();
+  return left.every((value, index) => value === right[index]);
+}
+
+export async function highlightSeats(
+  page: Page,
+  seats: readonly Seat[],
+  options: HighlightOptions = {},
+): Promise<string[]> {
+  const labels = seats.map((seat) => normalizeSeatToken(`${seat.row}${seat.number}`));
+  const text =
+    options.label ??
+    `cinema-assist 推荐座位: ${seats.map((seat) => `${seat.row}${seat.number}`).join(", ")}`;
+
+  return await page.evaluate(
+    (payload) => {
+      for (const existing of Array.from(document.querySelectorAll("[data-cinema-assist]"))) {
+        if (existing.getAttribute("data-cinema-assist") === "banner") {
+          existing.remove();
+          continue;
+        }
+        const element = existing as HTMLElement;
+        element.style.outline = "";
+        element.style.outlineOffset = "";
+        element.removeAttribute("data-cinema-assist");
+      }
+
+      const matched: string[] = [];
+      const elements = Array.from(document.querySelectorAll(payload.selector));
+      for (const element of elements) {
+        const normalized = (element.textContent || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        if (!payload.labels.includes(normalized)) continue;
+        const target = element as HTMLElement;
+        target.style.outline = "3px solid #ff2d55";
+        target.style.outlineOffset = "1px";
+        target.setAttribute("data-cinema-assist", "recommended");
+        matched.push(normalized);
+      }
+
+      const banner = document.createElement("div");
+      banner.textContent = payload.text;
+      banner.setAttribute("data-cinema-assist", "banner");
+      banner.style.cssText =
+        "position:fixed;z-index:99999;left:12px;bottom:12px;background:#ff2d55;color:#fff;padding:8px 12px;border-radius:6px;font-weight:bold;font-size:13px;";
+      document.body.appendChild(banner);
+
+      return matched;
+    },
+    { selector: SELECTORS.seat.seat, labels, text },
+  );
 }

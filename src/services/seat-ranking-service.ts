@@ -11,13 +11,17 @@ export type SeatRankingOptions = {
   maxSurchargeYen?: number;
   aislePreference?: "none" | "prefer" | "avoid";
   screenSide: "top" | "bottom";
+  screenCenterX?: number;
+  screenWidth?: number;
   targetRowRatio?: number;
   minScore?: number;
+  premiumAnchorBeforeRows?: number;
 };
 
 export const DEFAULT_TARGET_ROW_RATIO = 0.65;
 export const DEFAULT_ALLOWED_SEAT_TYPES = ["standard"] as const;
 export const DEFAULT_MAX_SURCHARGE_YEN = 0;
+export const DEFAULT_PREMIUM_ANCHOR_BEFORE_ROWS = 2;
 
 export type SeatTypeSummary = {
   seatType: string;
@@ -184,6 +188,26 @@ function consecutiveWindows<T>(items: readonly T[], size: number): T[][] {
   return windows;
 }
 
+function premiumAnchorRows(
+  rows: readonly RowInfo[],
+  screenSide: "top" | "bottom",
+  beforeRows: number,
+): Map<string, number> {
+  if (beforeRows <= 0) return new Map();
+  const screenToBack = screenSide === "top" ? [...rows] : [...rows].reverse();
+  const firstPremiumIndex = screenToBack.findIndex((row) =>
+    row.seats.some((seat) => seat.seatType === "premiumClass"),
+  );
+  if (firstPremiumIndex < 0) return new Map();
+
+  const result = new Map<string, number>();
+  for (let offset = 1; offset <= beforeRows; offset += 1) {
+    const row = screenToBack[firstPremiumIndex - offset];
+    if (row !== undefined) result.set(row.row, offset);
+  }
+  return result;
+}
+
 export function rankSeatGroups(
   seats: readonly Seat[],
   options: SeatRankingOptions,
@@ -197,6 +221,7 @@ export function rankSeatGroups(
   const excludedRows = options.excludedRows ?? [];
   const preferredRows = options.preferredRows ?? [];
   const preferredSeatNumbers = options.preferredSeatNumbers ?? [];
+  const anchorBeforeRows = options.premiumAnchorBeforeRows ?? DEFAULT_PREMIUM_ANCHOR_BEFORE_ROWS;
 
   const rowInfos = buildRowInfos(seats);
   if (rowInfos.length === 0) return [];
@@ -243,8 +268,12 @@ export function rankSeatGroups(
       if (!sorted.every((seat) => sameAttributes(seat, first))) continue;
 
       const groupX = average(sorted.map((seat) => seat.x ?? seat.number * 40));
-      const halfWidth = (info.maxX - info.minX) / 2 || 1;
-      const horizontalDeviation = Math.min(1, Math.abs(groupX - info.centerX) / halfWidth);
+      const horizontalTarget = options.screenCenterX ?? info.centerX;
+      const halfWidth =
+        options.screenWidth !== undefined && options.screenWidth > 0
+          ? options.screenWidth / 2
+          : (info.maxX - info.minX) / 2 || 1;
+      const horizontalDeviation = Math.min(1, Math.abs(groupX - horizontalTarget) / halfWidth);
       const rowDeviation = Math.min(1, Math.abs(info.y - targetY) / yRange);
 
       const reasons: string[] = [];
@@ -293,5 +322,31 @@ export function rankSeatGroups(
     if (b.score !== a.score) return b.score - a.score;
     return (a.seats[0]?.number ?? 0) - (b.seats[0]?.number ?? 0);
   });
+
+  // When Premium Class is only a positional reference (not an allowed seat type), prefer
+  // ordinary seats in the first two rows toward the screen. Explicit preferredRows take
+  // precedence, and the geometric ranking remains the fallback when the anchor area has no
+  // eligible group.
+  if (preferredRows.length === 0 && !allowed.includes("premiumClass")) {
+    const anchorRows = premiumAnchorRows(rowInfos, options.screenSide, anchorBeforeRows);
+    const anchored = groups.filter((group) => anchorRows.has(group.seats[0]?.row ?? ""));
+    if (anchored.length > 0) {
+      for (const group of anchored) {
+        const offset = anchorRows.get(group.seats[0]?.row ?? "");
+        // Both rows are one preferred band. The immediately adjacent row gets only a small
+        // tie-breaking bonus so that a centered group one row farther forward beats an edge group.
+        if (offset === 1) group.score = Math.round((group.score + 4) * 100) / 100;
+        group.reasons.push(`premium anchor: ${offset} row${offset === 1 ? "" : "s"} toward screen`);
+      }
+      anchored.sort((a, b) => {
+        const aOffset = anchorRows.get(a.seats[0]?.row ?? "") ?? Number.POSITIVE_INFINITY;
+        const bOffset = anchorRows.get(b.seats[0]?.row ?? "") ?? Number.POSITIVE_INFINITY;
+        if (b.score !== a.score) return b.score - a.score;
+        if (aOffset !== bOffset) return aOffset - bOffset;
+        return (a.seats[0]?.number ?? 0) - (b.seats[0]?.number ?? 0);
+      });
+      return anchored;
+    }
+  }
   return groups;
 }

@@ -122,7 +122,7 @@ src/
     migrations.ts
   notifications/
     console.ts
-    telegram.ts
+    line.ts
 tests/
   fixtures/
   unit/
@@ -213,6 +213,9 @@ IMAX 等影厅可能同时存在普通席和带附加费的特殊席。默认采
 - 只有规则明确设置 `allowedSeatTypes` 和足够的 `maxSurchargeYen` 时，才允许推荐高价座位。
 - 不得把不同座位等级、价位区或附加费的座位组合成连座。
 - 页面展示的是总价而不是附加费时，保留原始价目文本，不得猜测或自行换算。
+- 当页面存在 Premium Class 且规则仍只允许普通席时，默认把其朝向银幕一侧紧邻的前 1～2 排视为同一优先区域；在该区域内主要按座位组与银幕 SVG 实际渲染中心的水平偏差排序。前第 1 排仅有少量加分，不能让边缘座位压过第 2 排的居中座位。
+- Premium 锚点区域没有满足票数、连座和价格条件的候选组时，才回退到全厅几何评分。显式 `preferredRows` 优先于 Premium 锚点。
+- 三人票仍必须找到同排、同价位的连续三座；不得因为锚点区域座位不足而自动拆成 2+1。
 
 默认分数：
 
@@ -329,7 +332,18 @@ CANCELLED
 
 ## 10. 通知内容
 
-首版实现 console，之后实现 Telegram。成功通知必须包含：
+首版实现 console，之后使用 **LINE Messaging API** 增加 LINE 通知。LINE Notify 已停止服务，不得使用旧的 LINE Notify token 或 `notify-api.line.me`。
+
+LINE 通知配置：
+
+```text
+LINE_CHANNEL_ACCESS_TOKEN=...
+LINE_TARGET_ID=...               # 本人 userId 或明确配置的 groupId
+```
+
+Channel Access Token 和 target ID 只允许从环境变量读取，不得写入数据库、日志、trace、截图或 Git。发送使用官方 push message API；默认同时保留 console 输出作为本机兜底。LINE 发送失败不得改变监听、锁座或交易状态，也不得导致重复锁座；通知服务按有限次数退避重试，并记录不含响应敏感信息的错误摘要。
+
+成功通知必须包含：
 
 - 电影名、日期、时间、影厅/规格
 - 座位号、座位等级、价位区和每座附加费
@@ -414,10 +428,10 @@ CANCELLED
 1. 增加站点改版检测和 trace。
 2. 增加 429/拥堵测试。
 3. 增加进程崩溃恢复，但恢复后不得自动再次锁座。
-4. 增加 Telegram 通知。
+4. 增加 LINE Messaging API 通知：实现 `LineNotifier`、配置校验、消息格式、超时和有限重试；console 始终作为兜底。
 5. 写运行手册和故障排查文档。
 
-验收：模拟每个异常终态，程序均有明确日志和通知；不会因重试产生第二个临时授权。
+验收：模拟每个异常终态，程序均有明确日志和通知；不会因重试产生第二个临时授权。使用测试 LINE Official Account 完成一次真实 push 验证；接收目标正确、消息内容完整，Access Token 和 target ID 未出现在日志或 Git 中；模拟 LINE 429、5xx、超时及永久 4xx 时不会影响主流程或无限重试。
 
 ## 12. 测试矩阵
 

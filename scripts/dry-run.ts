@@ -88,7 +88,13 @@ async function main(): Promise<void> {
     }
 
     const seatState = requireSeatState(await capture.waitForSeatState(20_000));
-    const { seats, legend, screenSide: domScreenSide } = await readSeatMap(page, seatState);
+    const {
+      seats,
+      legend,
+      screenSide: domScreenSide,
+      screenCenterX,
+      screenWidth,
+    } = await readSeatMap(page, seatState);
     assertSeatStateCount(seatState, seats);
 
     const layout = await layoutCapture.waitForScreenSide(5_000);
@@ -136,6 +142,8 @@ async function main(): Promise<void> {
       ticketCount,
       requireAdjacent,
       screenSide,
+      ...(screenCenterX !== undefined ? { screenCenterX } : {}),
+      ...(screenWidth !== undefined ? { screenWidth } : {}),
       targetRowRatio,
       maxSurchargeYen,
       ...(splitList(values["seat-type"]) !== undefined

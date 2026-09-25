@@ -1,9 +1,13 @@
+import type { Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
   assertSeatStateCount,
   type DomSeat,
   determineScreenSide,
+  isSeatStateConsistent,
+  labelsMatch,
   mergeSeatMap,
+  normalizeSeatToken,
   parseSeatLegend,
   parseSeatState,
   parseTheaterLayout,
@@ -11,6 +15,8 @@ import {
   SeatStateCountMismatchError,
   type SeatStateInfo,
   SeatStateUnavailableError,
+  waitForSeatMap,
+  waitForSeatPage,
 } from "../../src/adapters/cinemasunshine/seat-map.js";
 import type { Seat } from "../../src/domain/seat.js";
 import { readFixtureJson } from "../helpers.js";
@@ -51,6 +57,7 @@ describe("parseSeatState", () => {
     expect(info.availableKeys.has("A6")).toBe(true);
     expect(info.availableKeys.has("A7")).toBe(false);
     expect(info.availableKeys.size).toBe(1);
+    expect(info.unmappableFree).toBe(1);
   });
 
   it("flags an invalid payload as not ok", () => {
@@ -58,6 +65,15 @@ describe("parseSeatState", () => {
     expect(info.ok).toBe(false);
     expect(info.availableKeys.size).toBe(0);
     expect(info.countFree).toBeUndefined();
+  });
+
+  it("counts duplicate API seat keys", () => {
+    const info = parseSeatState({
+      cntReserveFree: 1,
+      listSeat: [{ listFreeSeat: [{ seatNum: "ａ－６" }, { seatNum: "ａ－６" }] }],
+    });
+    expect(info.availableKeys.size).toBe(1);
+    expect(info.duplicateFreeKeys).toBe(1);
   });
 });
 
@@ -120,15 +136,72 @@ describe("assertSeatStateCount", () => {
     const info: SeatStateInfo = {
       ok: true,
       countFree: 5,
-      availableKeys: new Set(["A1"]),
+      availableKeys: new Set(["A1", "A2"]),
       byKey: new Map(),
     };
     expect(() => assertSeatStateCount(info, [makeSeat()])).toThrow(SeatStateCountMismatchError);
   });
 
-  it("skips validation when the API omits cntReserveFree", () => {
+  it("expects zero when no mapped API key is free", () => {
     const info: SeatStateInfo = { ok: true, availableKeys: new Set(), byKey: new Map() };
-    expect(() => assertSeatStateCount(info, [makeSeat()])).not.toThrow();
+    expect(() =>
+      assertSeatStateCount(info, [makeSeat({ available: false, selectable: false })]),
+    ).not.toThrow();
+    expect(() => assertSeatStateCount(info, [makeSeat()])).toThrow(SeatStateCountMismatchError);
+  });
+});
+
+describe("isSeatStateConsistent", () => {
+  function keys(count: number): Set<string> {
+    const set = new Set<string>();
+    for (let index = 1; index <= count; index += 1) set.add(`A${index}`);
+    return set;
+  }
+
+  it("accepts the real mapped-count relationships", () => {
+    expect(
+      isSeatStateConsistent({
+        ok: true,
+        countFree: 72,
+        unmappableFree: 2,
+        availableKeys: keys(72),
+        byKey: new Map(),
+      }),
+    ).toBe(true);
+    expect(
+      isSeatStateConsistent({
+        ok: true,
+        countFree: 264,
+        unmappableFree: 1,
+        availableKeys: keys(263),
+        byKey: new Map(),
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects contradictory or duplicate responses", () => {
+    expect(
+      isSeatStateConsistent({
+        ok: true,
+        countFree: 5,
+        unmappableFree: 0,
+        availableKeys: keys(1),
+        byKey: new Map(),
+      }),
+    ).toBe(false);
+    expect(
+      isSeatStateConsistent({
+        ok: true,
+        countFree: 1,
+        unmappableFree: 0,
+        duplicateFreeKeys: 1,
+        availableKeys: keys(1),
+        byKey: new Map(),
+      }),
+    ).toBe(false);
+    expect(isSeatStateConsistent({ ok: false, availableKeys: new Set(), byKey: new Map() })).toBe(
+      false,
+    );
   });
 });
 
@@ -267,5 +340,154 @@ describe("real sanitized fixtures", () => {
     });
 
     expect(() => assertSeatStateCount(state, seats)).not.toThrow();
+  });
+});
+
+describe("normalizeSeatToken and labelsMatch", () => {
+  it("normalizes labels and compares sets exactly", () => {
+    expect(normalizeSeatToken(" e8 ")).toBe("E8");
+    expect(normalizeSeatToken("ｄ－４")).toBe("D4");
+    expect(labelsMatch(["E8", "E9"], ["E9", "E8"])).toBe(true);
+    expect(labelsMatch(["E8", "E9"], ["E8"])).toBe(false);
+    expect(labelsMatch(["E8", "E9"], ["E8", "E9", "E9"])).toBe(false);
+    expect(labelsMatch(["E8"], ["E9"])).toBe(false);
+  });
+});
+
+describe("waitForSeatMap", () => {
+  it("waits for the DOM to stabilize against the API count", async () => {
+    const info: SeatStateInfo = {
+      ok: true,
+      countFree: 1,
+      availableKeys: new Set(["D3"]),
+      byKey: new Map(),
+    };
+    const empty = {
+      seats: [],
+      legend: [],
+      screenSide: "unknown" as const,
+      seatElementCount: 0,
+      parsedDomSeatCount: 0,
+    };
+    const ready = {
+      seats: [makeSeat({ row: "D", number: 3 })],
+      legend: [],
+      screenSide: "top" as const,
+      seatElementCount: 1,
+      parsedDomSeatCount: 1,
+    };
+    let calls = 0;
+    const read = async () => {
+      calls += 1;
+      return calls === 1 ? empty : ready;
+    };
+
+    const result = await waitForSeatMap({} as Page, info, { timeoutMs: 500, pollMs: 1, read });
+
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") expect(result.seats).toHaveLength(1);
+    expect(calls).toBeGreaterThanOrEqual(2);
+  });
+
+  it("matches the DOM against mapped API keys, ignoring unmappable seats", async () => {
+    const info: SeatStateInfo = {
+      ok: true,
+      countFree: 1,
+      unmappableFree: 1,
+      availableKeys: new Set(["D3"]),
+      byKey: new Map(),
+    };
+    const read = async () => ({
+      seats: [makeSeat({ row: "D", number: 3 })],
+      legend: [],
+      screenSide: "top" as const,
+      seatElementCount: 1,
+      parsedDomSeatCount: 1,
+    });
+
+    const result = await waitForSeatMap({} as Page, info, { timeoutMs: 200, pollMs: 1, read });
+    expect(result.status).toBe("ready");
+  });
+
+  it("matches the real 264/263/1 scenario", async () => {
+    const keys = new Set<string>();
+    for (let index = 1; index <= 263; index += 1) keys.add(`A${index}`);
+    const info: SeatStateInfo = {
+      ok: true,
+      countFree: 264,
+      unmappableFree: 1,
+      availableKeys: keys,
+      byKey: new Map(),
+    };
+    const seats = [...keys].map((key) => {
+      const number = Number(key.slice(1));
+      return makeSeat({ row: "A", number, label: `a${number}` });
+    });
+    const read = async () => ({
+      seats,
+      legend: [],
+      screenSide: "top" as const,
+      seatElementCount: seats.length,
+      parsedDomSeatCount: seats.length,
+    });
+
+    const result = await waitForSeatMap({} as Page, info, { timeoutMs: 200, pollMs: 1, read });
+    expect(result.status).toBe("ready");
+  });
+
+  it("returns timeout diagnostics when the DOM never matches", async () => {
+    const info: SeatStateInfo = {
+      ok: true,
+      countFree: 5,
+      unmappableFree: 1,
+      availableKeys: new Set(["D3"]),
+      byKey: new Map(),
+    };
+    const empty = {
+      seats: [],
+      legend: [],
+      screenSide: "unknown" as const,
+      seatElementCount: 0,
+      parsedDomSeatCount: 0,
+      url: "https://transaction.ticket-cinemasunshine.com/#/purchase/seat",
+    };
+
+    const result = await waitForSeatMap({} as Page, info, {
+      timeoutMs: 20,
+      pollMs: 1,
+      read: async () => empty,
+    });
+
+    expect(result.status).toBe("timeout");
+    if (result.status === "timeout") {
+      expect(result.apiFreeCount).toBe(5);
+      expect(result.mappedApiFree).toBe(1);
+      expect(result.unmappableFree).toBe(1);
+      expect(result.availableCount).toBe(0);
+      expect(result.domSeatElementCount).toBe(0);
+      expect(result.url).toContain("/#/purchase/seat");
+    }
+  });
+});
+
+describe("waitForSeatPage", () => {
+  it("waits for the seat route and selector, and times out otherwise", async () => {
+    let count = 0;
+    const page = {
+      url: () => "https://transaction.ticket-cinemasunshine.com/#/purchase/seat",
+      locator: () => ({ count: async () => count }),
+    } as unknown as Page;
+
+    const first = waitForSeatPage(page, { timeoutMs: 300, pollMs: 5 });
+    setTimeout(() => {
+      count = 3;
+    }, 20);
+    await expect(first).resolves.toBe(true);
+
+    const never = {
+      url: () => "https://transaction.ticket-cinemasunshine.com/#/purchase/seat",
+      locator: () => ({ count: async () => 0 }),
+    } as unknown as Page;
+    await expect(waitForSeatPage(never, { timeoutMs: 20, pollMs: 1 })).resolves.toBe(false);
   });
 });

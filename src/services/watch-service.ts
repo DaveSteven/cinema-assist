@@ -8,6 +8,7 @@ import type { Clock } from "../clock.js";
 import { systemClock } from "../clock.js";
 import type { SalesAudience, SalesStatus, Screening } from "../domain/screening.js";
 import { filterScreenings, sortScreeningsByStart } from "../domain/screening.js";
+import type { Seat } from "../domain/seat.js";
 import type { WatchRule } from "../domain/watch-rule.js";
 import type { Logger } from "../logger.js";
 import { silentLogger } from "../logger.js";
@@ -18,6 +19,7 @@ import {
   expectedSaleOpensAtForRule,
   pollSchedule,
 } from "./sale-time-service.js";
+import type { AssistOutcome } from "./seat-assist-service.js";
 import { acquireSingleInstanceLock, LockError, type LockHandle } from "./single-instance-lock.js";
 
 export type ScheduleSource = {
@@ -34,13 +36,35 @@ export type WatchState =
   | "waiting_for_schedule"
   | "waiting_for_sale"
   | "ready"
+  | "user_action_required"
   | "sold_out"
   | "no_match"
+  | "login_required"
+  | "session_expired"
+  | "congested"
+  | "duplicate_transaction"
+  | "site_changed"
+  | "hold_conflict"
   | "rate_limited"
   | "error"
   | "cancelled";
 
 type ScanState = "waiting_for_schedule" | "waiting_for_sale" | "ready" | "sold_out" | "no_match";
+
+const FAILURE_WATCH_STATES: ReadonlySet<WatchState> = new Set<WatchState>([
+  "error",
+  "site_changed",
+  "login_required",
+  "session_expired",
+  "congested",
+  "duplicate_transaction",
+  "hold_conflict",
+  "no_match",
+]);
+
+export function isFailureWatchState(state: WatchState): boolean {
+  return FAILURE_WATCH_STATES.has(state);
+}
 
 type ScanResult = {
   state: ScanState;
@@ -102,6 +126,7 @@ export type WatchServiceOptions = {
   logger?: Logger;
   maxDayFetches?: number;
   random?: () => number;
+  seatAssist?: (rule: WatchRule, screening: Screening) => Promise<AssistOutcome>;
 };
 
 export class WatchService {
@@ -122,7 +147,7 @@ export class WatchService {
     const rule = this.options.repository.get(ruleId);
     if (rule === undefined) throw new RuleNotFoundError(ruleId);
     if (!rule.enabled) throw new RuleNotEnabledError(ruleId);
-    if (rule.mode !== "notify") throw new UnsupportedWatchModeError(rule.mode);
+    if (rule.mode === "hold") throw new UnsupportedWatchModeError(rule.mode);
     if (this.active.has(ruleId)) throw new RuleAlreadyRunningError(ruleId);
 
     this.active.add(ruleId);
@@ -157,6 +182,11 @@ export class WatchService {
       try {
         const result = await this.scan(rule, this.clock.now());
         consecutiveErrors = 0;
+
+        if (result.state === "ready" && rule.mode === "assist") {
+          return await this.runAssist(rule, result.target);
+        }
+
         lastState = result.state;
         await this.enterState(rule, result.state, {
           ...(result.target !== undefined ? { target: result.target } : {}),
@@ -172,6 +202,7 @@ export class WatchService {
           this.logger.info({ ruleId: rule.id, state: result.state }, "watch finished");
           return result.state;
         }
+
         intervalMs = pollSchedule(expectedSaleOpensAt, this.clock.now()).intervalMs;
       } catch (error) {
         consecutiveErrors += 1;
@@ -194,6 +225,34 @@ export class WatchService {
 
     await this.enterState(rule, "cancelled");
     return "cancelled";
+  }
+
+  private async runAssist(rule: WatchRule, target: Screening | undefined): Promise<WatchState> {
+    if (target === undefined || this.options.seatAssist === undefined) {
+      await this.enterState(rule, "error", {
+        reason: "assist requires a matched screening and a configured seat assist handler",
+      });
+      this.logger.warn({ ruleId: rule.id }, "assist not configured");
+      return "error";
+    }
+
+    this.logger.info({ ruleId: rule.id, performanceId: target.performanceId }, "assist starting");
+    try {
+      const outcome = await this.options.seatAssist(rule, target);
+      const state: WatchState = outcome.state;
+      await this.enterState(rule, state, {
+        target,
+        ...(outcome.group !== undefined ? { seats: outcome.group.seats } : {}),
+        ...(outcome.reasons !== undefined ? { reason: outcome.reasons.join("; ") } : {}),
+      });
+      this.logger.info({ ruleId: rule.id, state }, "assist finished");
+      return state;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn({ ruleId: rule.id, err: message }, "assist failed");
+      await this.enterState(rule, "error", { target, reason: message });
+      return "error";
+    }
   }
 
   private async scan(rule: WatchRule, now: Date): Promise<ScanResult> {
@@ -270,7 +329,12 @@ export class WatchService {
   private async enterState(
     rule: WatchRule,
     state: WatchState,
-    options: { target?: Screening; reason?: string; expectedSaleOpensAt?: string } = {},
+    options: {
+      target?: Screening;
+      reason?: string;
+      expectedSaleOpensAt?: string;
+      seats?: Seat[];
+    } = {},
   ): Promise<void> {
     const current = this.options.repository.getRuntimeState(rule.id);
     if (current?.lastState !== state) {
@@ -297,7 +361,7 @@ export class WatchService {
   private buildEvent(
     state: WatchState,
     rule: WatchRule,
-    options: { target?: Screening; reason?: string; expectedSaleOpensAt?: string },
+    options: { target?: Screening; reason?: string; expectedSaleOpensAt?: string; seats?: Seat[] },
   ): NotificationEvent | undefined {
     switch (state) {
       case "created":
@@ -317,6 +381,25 @@ export class WatchService {
         return options.target === undefined
           ? undefined
           : { type: "sales_open", rule, screening: options.target };
+      case "user_action_required": {
+        const first = options.seats?.[0];
+        if (options.target === undefined || first === undefined) {
+          return {
+            type: "error",
+            rule,
+            message: "assist finished without a recommended seat group",
+          };
+        }
+        return {
+          type: "assist_ready",
+          rule,
+          screening: options.target,
+          seats: options.seats ?? [],
+          seatType: first.seatType,
+          ...(first.priceCategory !== undefined ? { priceCategory: first.priceCategory } : {}),
+          ...(first.surchargeYen !== undefined ? { surchargeYen: first.surchargeYen } : {}),
+        };
+      }
       case "sold_out":
         return options.target === undefined
           ? undefined
@@ -326,6 +409,17 @@ export class WatchService {
           type: "no_match",
           rule,
           ...(options.reason !== undefined ? { reason: options.reason } : {}),
+        };
+      case "login_required":
+      case "session_expired":
+      case "congested":
+      case "duplicate_transaction":
+      case "site_changed":
+      case "hold_conflict":
+        return {
+          type: "error",
+          rule,
+          message: `${state}${options.reason !== undefined ? `: ${options.reason}` : ""}`,
         };
       case "rate_limited":
         return { type: "rate_limited", rule, message: options.reason ?? "" };
